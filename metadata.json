@@ -1,0 +1,5 @@
+{
+  "name": "AI Audio Player",
+  "description": "An aesthetically pleasing audio player that uses the Gemini API to generate descriptive vibes for the currently playing track. Features a sleek, modern interface with a playlist, playback controls, and dynamic AI-generated content.",
+  "requestFramePermissions": []
+}

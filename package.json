@@ -1,0 +1,51 @@
+{
+  "name": "ai-audio-player",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "electron/main.js",
+  "scripts": {
+    "react-dev": "vite",
+    "electron-dev": "wait-on http://localhost:5173 && electron .",
+    "dev": "concurrently \"npm:react-dev\" \"npm:electron-dev\"",
+    "build": "vite build",
+    "dist": "npm run build && electron-builder",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@google/genai": "^1.22.0",
+    "firebase": "^10.12.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.13",
+    "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^8.2.2",
+    "electron": "^31.0.2",
+    "electron-builder": "^24.13.3",
+    "electron-is-dev": "^3.0.1",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.electron.aiaudioplayer",
+    "productName": "AI Audio Player",
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "directories": {
+      "buildResources": "assets",
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}
