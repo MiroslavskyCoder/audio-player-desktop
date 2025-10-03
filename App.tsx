@@ -28,6 +28,15 @@ declare global {
   }
 }
 
+const EQ_FREQUENCIES = [60, 310, 1000, 3000, 6000, 12000];
+const PRESETS: { [key: string]: number[] } = {
+    'Flat': [0, 0, 0, 0, 0, 0],
+    'Rock': [5, 3, -4, -3, 3, 5],
+    'Pop': [2, 4, 3, 0, -2, -3],
+    'Jazz': [-2, 3, 5, 2, -1, -2],
+};
+
+
 const App: React.FC = () => {
   const [tracks, setTracks] = useState<Track[]>(TRACKS);
   const [currentTrackIndex, setCurrentTrackIndex] = useState<number>(0);
@@ -43,6 +52,8 @@ const App: React.FC = () => {
   const [volume, setVolume] = useState<number>(1);
   const [effects, setEffects] = useState<string[]>([]);
   const [activeEffect, setActiveEffect] = useState<string | null>(null);
+  const [eqBands, setEqBands] = useState<number[]>(PRESETS['Flat']);
+  const [activePreset, setActivePreset] = useState<string>('Flat');
 
   const audioRef = useRef<HTMLAudioElement>(new Audio());
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -54,6 +65,7 @@ const App: React.FC = () => {
   const reverbNodeRef = useRef<ConvolverNode | null>(null);
   const filterNodeRef = useRef<BiquadFilterNode | null>(null);
   const analyserNodeRef = useRef<AnalyserNode | null>(null);
+  const eqNodesRef = useRef<BiquadFilterNode[]>([]);
 
 
   const currentTrack = tracks[currentTrackIndex];
@@ -73,6 +85,21 @@ const App: React.FC = () => {
       const analyser = context.createAnalyser();
       analyser.fftSize = 128;
       analyserNodeRef.current = analyser;
+      
+      // Create EQ filters
+      const eqNodes = EQ_FREQUENCIES.map(freq => {
+          const filter = context.createBiquadFilter();
+          filter.type = 'peaking';
+          filter.frequency.value = freq;
+          filter.Q.value = 1.4;
+          filter.gain.value = 0;
+          return filter;
+      });
+      for (let i = 0; i < eqNodes.length - 1; i++) {
+          eqNodes[i].connect(eqNodes[i+1]);
+      }
+      eqNodesRef.current = eqNodes;
+
 
       // Create Reverb Effect
       const reverb = context.createConvolver();
@@ -88,7 +115,8 @@ const App: React.FC = () => {
       filter.Q.value = 1;
       filterNodeRef.current = filter;
 
-      source.connect(gain).connect(analyser).connect(context.destination);
+      // Initial connection - will be re-routed by effects
+      source.connect(gain);
   }, []);
 
   useEffect(() => {
@@ -103,21 +131,43 @@ const App: React.FC = () => {
       const { current: analyser } = analyserNodeRef;
       const { current: reverb } = reverbNodeRef;
       const { current: filter } = filterNodeRef;
+      const { current: eqNodes } = eqNodesRef;
       
-      if (!context || !gain || !analyser || !reverb || !filter) return;
+      if (!context || !gain || !analyser || !reverb || !filter || eqNodes.length === 0) return;
 
-      // Disconnect all to start fresh
+      // Disconnect all nodes that are about to be reconnected to avoid duplicates
       gain.disconnect();
+      const lastEqNode = eqNodes[eqNodes.length - 1];
+      lastEqNode.disconnect();
+      reverb.disconnect();
+      filter.disconnect();
 
-      // Re-route based on active effect
+      // Always connect gain to the start of the EQ chain
+      gain.connect(eqNodes[0]);
+      
+      // Connect from the end of the EQ chain to the effects or analyser
+      let lastNodeInChain: AudioNode = lastEqNode;
+
       if (activeEffect === 'ClarityVerb.vst3' && reverb) {
-          gain.connect(reverb).connect(analyser).connect(context.destination);
+          lastNodeInChain.connect(reverb);
+          lastNodeInChain = reverb;
       } else if (activeEffect === 'BassShaper.vst3' && filter) {
-          gain.connect(filter).connect(analyser).connect(context.destination);
-      } else {
-          gain.connect(analyser).connect(context.destination);
+          lastNodeInChain.connect(filter);
+          lastNodeInChain = filter;
       }
+      
+      lastNodeInChain.connect(analyser).connect(context.destination);
   }, [activeEffect]);
+
+  useEffect(() => {
+    if (eqNodesRef.current.length > 0) {
+        eqBands.forEach((gainValue, index) => {
+            if (eqNodesRef.current[index]) {
+                eqNodesRef.current[index].gain.value = gainValue;
+            }
+        });
+    }
+  }, [eqBands]);
 
 
   useEffect(() => {
@@ -369,6 +419,22 @@ const App: React.FC = () => {
       setActiveEffect(prev => (prev === effectName ? null : effectName));
   };
 
+  const handleEqChange = (bandIndex: number, value: number) => {
+      setActivePreset('Custom');
+      setEqBands(prev => {
+          const newBands = [...prev];
+          newBands[bandIndex] = value;
+          return newBands;
+      });
+  };
+
+  const handlePresetSelect = (presetName: string) => {
+      if (PRESETS[presetName]) {
+          setActivePreset(presetName);
+          setEqBands(PRESETS[presetName]);
+      }
+  };
+
 
   const displayedTracks = useMemo(() => {
     if (playlistView === 'liked') {
@@ -443,6 +509,11 @@ const App: React.FC = () => {
             activeEffect={activeEffect}
             onLoadVst={handleLoadVst}
             onToggleEffect={handleToggleEffect}
+            eqBands={eqBands}
+            onEqChange={handleEqChange}
+            presets={PRESETS}
+            activePreset={activePreset}
+            onPresetSelect={handlePresetSelect}
           />
         )}
       </div>
